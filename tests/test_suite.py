@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import pytest
+
 from synthtraffic import Config, load, run, run_tests
 
 FAST = Config(n_days=35, access_log_lines=300)
@@ -15,7 +17,7 @@ def test_integrity_checks_pass(fast_result):
 
 def test_no_label_leakage(fast_result):
     from synthtraffic import export_frames
-    sessions, events, gt = export_frames(fast_result)
+    sessions, _events, gt = export_frames(fast_result)
     assert not [c for c in sessions.columns if "bot" in c or "anomaly" in c]
     assert set(gt.columns) == {"session_id", "date", "is_bot", "anomaly"}
 
@@ -71,6 +73,7 @@ def test_kpi_targets(seed):
 def test_weekly_rhythm_on_average():
     """Per-seed ACF(7) ranges 0.30-0.70; the mean is the stable quantity."""
     import numpy as np
+
     from synthtraffic import kpi_metrics
     from synthtraffic.validate import anomaly_dates
     vals = []

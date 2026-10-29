@@ -20,7 +20,21 @@ from .validate import TARGETS, anomaly_dates, kpi_metrics, report, run_tests
 __version__ = "2.0.0"
 
 __all__ = [
-    "__version__", "Config", "load", "Site", "build_site", "SITE_TREE", "TOUR2COUNTRY",
-    "EVENT_CAL", "Result", "run", "export_frames", "write_outputs", "TARGETS",
-    "anomaly_dates", "kpi_metrics", "run_tests", "report",
+    "EVENT_CAL",
+    "SITE_TREE",
+    "TARGETS",
+    "TOUR2COUNTRY",
+    "Config",
+    "Result",
+    "Site",
+    "__version__",
+    "anomaly_dates",
+    "build_site",
+    "export_frames",
+    "kpi_metrics",
+    "load",
+    "report",
+    "run",
+    "run_tests",
+    "write_outputs",
 ]

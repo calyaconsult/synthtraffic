@@ -8,20 +8,42 @@ from __future__ import annotations
 import math
 import os
 import platform
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from .config import Config
-from .model import (BROWSER_BY_DEVICE, CAMPAIGNS, CH_CAT, CHANNELS, COUNTRIES, CTY_CAT,
-                    DEV_CAT, DEVICES, DOW_W, EVENT_CAL, FUNNEL, FUNNEL_EVENT, INTENT_CAT,
-                    REFERRERS, Site, build_site, hour_cat, landing, next_page, pick, season,
-                    sigmoid, utc_offset_h)
+from .model import (
+    BROWSER_BY_DEVICE,
+    CAMPAIGNS,
+    CH_CAT,
+    CHANNELS,
+    COUNTRIES,
+    CTY_CAT,
+    DEV_CAT,
+    DEVICES,
+    DOW_W,
+    EVENT_CAL,
+    FUNNEL,
+    FUNNEL_EVENT,
+    INTENT_CAT,
+    REFERRERS,
+    Site,
+    build_site,
+    hour_cat,
+    landing,
+    next_page,
+    pick,
+    season,
+    sigmoid,
+    utc_offset_h,
+)
 
-__all__ = ["Result", "run", "inject_dirt", "daily_kpis", "access_log"]
+__all__ = ["Result", "access_log", "daily_kpis", "inject_dirt", "run"]
 
 UA = {"mobile": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1",
       "desktop": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/127.0 Safari/537.36",
@@ -73,7 +95,7 @@ def run(cfg: Config | None = None, site: Site | None = None,
         n = int(rng.negative_binomial(r, r / (r + lam)))
         day_users.append([])
         noon = d + timedelta(hours=12); srv = utc_offset_h(cfg.server_tz, noon)
-        shift = {c: int(round(utc_offset_h(v["tz"], noon) - srv)) for c, v in COUNTRIES.items()}
+        shift = {c: round(utc_offset_h(v["tz"], noon) - srv) for c, v in COUNTRIES.items()}
         lab = label or ""
         for _ in range(n):
             seq += 1
@@ -107,7 +129,7 @@ def run(cfg: Config | None = None, site: Site | None = None,
             channel = CH_CAT(rng)
             if "newsletter" in lab and rng.random() < .65: channel = "email"
             if "paid" in lab and rng.random() < .70: channel = "paid_search"
-            if "tv_feature" in lab: channel = pick(rng, ["direct", "organic_search", "social"], [.5, .3, .2])
+            if "tv_feature" in lab: channel = str(pick(rng, ["direct", "organic_search", "social"], [.5, .3, .2]))
             intent = INTENT_CAT(rng)
             if channel == "email" and rng.random() < .30: intent = "buyer"
             if channel == "social" and rng.random() < .50: intent = "browser"
@@ -141,36 +163,39 @@ def run(cfg: Config | None = None, site: Site | None = None,
 
             tours = [u for u in path if site.pages[u]["page_type"] == "tour"]
             booked = (tours[-1] if tours else site.tour_cat(rng)) if conv else None
-            if conv:
+            if conv and booked is not None:
                 pax = pick(rng, [1, 2, 3, 4, 6], [.18, .52, .12, .13, .05])
                 adj = min(max(float(rng.lognormal(0, 0.12)), lo_adj), hi_adj)
-                rev = round(site.price(booked) * pax * adj, 2)
+                rev = round(site.price(str(booked)) * pax * adj, 2)
             else:
                 pax, rev = 0, 0.0
             sid = f"s_{int(rng.integers(1 << 62)):016x}"
-            rows.append(dict(session_id=sid, user_id=key, session_start=ts, date=d.date(), hour=hour,
-                dow=int(d.dayofweek), channel=channel,
-                campaign=CAMPAIGNS(rng) if channel in ("paid_search", "email", "social") else None,
-                referrer=(pick(rng, REFERRERS[channel], [1] * len(REFERRERS[channel])) or "(direct)"),
-                device=device, browser=BROWSER_BY_DEVICE[device](rng), country=ctry,
-                language=COUNTRIES[cty]["lang"], landing_page=path[0], exit_page=path[-1],
-                pageviews=pv, duration_sec=dur, bounced=int(pv == 1),
-                reached_funnel=int(any(u in FUNNEL for u in path)), converted=conv, pax=pax,
-                revenue_eur=rev, booked_tour=booked, tour_pages_viewed=len(tours),
-                country_pages_viewed=sum(site.pages[u]["page_type"] == "country" for u in path),
-                _seq=seq, _emit=emit, _is_bot=int(is_bot), _anomaly=label, _true_country=cty,
-                _tzshift=shift[cty]))
+            refs = REFERRERS[channel]
+            ref_weights = [1.0] * len(refs)
+            rows.append({"session_id": sid, "user_id": key, "session_start": ts, "date": d.date(), "hour": hour,
+                "dow": int(d.dayofweek), "channel": channel,
+                "campaign": CAMPAIGNS(rng) if channel in ("paid_search", "email", "social") else None,
+                "referrer": (pick(rng, refs, ref_weights) or "(direct)"),
+                "device": device, "browser": BROWSER_BY_DEVICE[device](rng), "country": ctry,
+                "language": COUNTRIES[cty]["lang"], "landing_page": path[0], "exit_page": path[-1],
+                "pageviews": pv, "duration_sec": dur, "bounced": int(pv == 1),
+                "reached_funnel": int(any(u in FUNNEL for u in path)), "converted": conv, "pax": pax,
+                "revenue_eur": rev, "booked_tour": booked, "tour_pages_viewed": len(tours),
+                "country_pages_viewed": sum(site.pages[u]["page_type"] == "country" for u in path),
+                "_seq": seq, "_emit": emit, "_is_bot": int(is_bot), "_anomaly": label, "_true_country": cty,
+                "_tzshift": shift[cty]})
             if emit and cfg.write_events:
-                offs = [0.0] + sorted(float(x) * dur for x in rng.random(pv - 1)) if pv > 1 else [0.0]
+                rnd_vals = rng.random(pv - 1)
+                offs = [0.0] + sorted(float(x) * dur for x in (rnd_vals if isinstance(rnd_vals, np.ndarray) else [rnd_vals])) if pv > 1 else [0.0]
                 for i, u in enumerate(path):
                     pg = site.pages[u]; ename = FUNNEL_EVENT.get(u, "page_view")
-                    events.append(dict(event_id=f"{sid}_{i+1:02d}", session_id=sid, user_id=key,
-                        event_ts=ts + timedelta(seconds=offs[i]), event_name=ename, step=i + 1,
-                        page_url=u, page_title=pg["page_title"], section=pg["section"],
-                        region=pg["region"], page_type=pg["page_type"], list_price_eur=pg["price"],
-                        channel=channel, device=device, country=ctry,
-                        revenue_eur=rev if (conv and ename == "purchase") else 0.0,
-                        _is_bot=int(is_bot)))
+                    events.append({"event_id": f"{sid}_{i+1:02d}", "session_id": sid, "user_id": key,
+                        "event_ts": ts + timedelta(seconds=offs[i]), "event_name": ename, "step": i + 1,
+                        "page_url": u, "page_title": pg["page_title"], "section": pg["section"],
+                        "region": pg["region"], "page_type": pg["page_type"], "list_price_eur": pg["price"],
+                        "channel": channel, "device": device, "country": ctry,
+                        "revenue_eur": rev if (conv and ename == "purchase") else 0.0,
+                        "_is_bot": int(is_bot)})
 
     S = pd.DataFrame(rows)
     # returning flag & visit number from chronological history (incl. burn-in)
@@ -185,7 +210,7 @@ def run(cfg: Config | None = None, site: Site | None = None,
     K = daily_kpis(S, G)
     LOG = access_log(E, cfg, rng) if cfg.access_log_lines and len(E) else []
     meta = {"seed": cfg.seed, "config": cfg.as_dict(),
-            "rows": {"sessions": int(len(S)), "events": int(len(E)), "ground_truth": int(len(G))},
+            "rows": {"sessions": len(S), "events": len(E), "ground_truth": len(G)},
             "numpy": np.__version__, "pandas": pd.__version__,
             "python": platform.python_version(), "git_sha": os.environ.get("GIT_SHA")}
     return Result(S, E, G, K, LOG, cfg, site, events_cal, meta)
@@ -229,7 +254,7 @@ def access_log(E: pd.DataFrame, cfg: Config, rng: np.random.Generator) -> list[s
     for ets, url, dev, isbot in zip(smp.event_ts, smp.page_url, smp.device, smp["_is_bot"]):
         ts = pd.Timestamp(ets).floor("s")
         oh = utc_offset_h(cfg.server_tz, ts)
-        tzs = f"{'+' if oh >= 0 else '-'}{int(abs(oh)):02d}{int(round(abs(oh) % 1 * 60)):02d}"
+        tzs = f"{'+' if oh >= 0 else '-'}{int(abs(oh)):02d}{round(abs(oh) % 1 * 60):02d}"
         ip = f"{rng.integers(10,220)}.{rng.integers(0,255)}.{rng.integers(0,255)}.{rng.integers(1,254)}"
         code = pick(rng, [200, 304, 404, 500], [.88, .06, .05, .01])
         ua = UA["bot"] if (isbot and rng.random() < .4) else UA[dev]

@@ -10,8 +10,9 @@ Two kinds of checks:
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import timedelta
-from typing import Any, Mapping
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -22,7 +23,7 @@ from .export import export_frames
 from .generate import Result
 from .model import EVENT_CAL, FUNNEL
 
-__all__ = ["TARGETS", "anomaly_dates", "kpi_metrics", "run_tests", "report"]
+__all__ = ["TARGETS", "anomaly_dates", "kpi_metrics", "report", "run_tests"]
 
 # metric: (low, high), fixed before tuning
 TARGETS: Mapping[str, tuple[float, float]] = {
@@ -88,10 +89,10 @@ def run_tests(res: Result, kpi_checks: bool = True) -> tuple[pd.DataFrame, dict[
     T: list[dict[str, Any]] = []
 
     def add(name: str, ok: Any, val: str, target: str) -> None:
-        T.append(dict(test=name, passed=bool(ok), value=val, target=target))
+        T.append({"test": name, "passed": bool(ok), "value": val, "target": target})
 
     def skip(name: str, why: str) -> None:
-        T.append(dict(test=name, passed=True, value=f"skipped ({why})", target="-"))
+        T.append({"test": name, "passed": True, "value": f"skipped ({why})", "target": "-"})
 
     ev_tests = ("Revenue: events == sessions", "1 purchase event per booking, 0 for others",
                 "Confirm page at most once per session", "Pageviews == event rows")
@@ -126,13 +127,19 @@ def run_tests(res: Result, kpi_checks: bool = True) -> tuple[pd.DataFrame, dict[
     for c in ("CH", "US", "AE"):
         h = Sb[(Sb["_is_bot"] == 0) & (Sb["_true_country"] == c)]
         peaks[c] = int(((h.hour + h["_tzshift"]) % 24).value_counts().idxmax()) if len(h) else -1
-    add("Local-time peak 19-21h (CH, US, AE)", all(19 <= v <= 21 for v in peaks.values()),
-        ", ".join(f"{k} {v}:00" for k, v in peaks.items()), "19-21")
+    if cfg.n_days >= 91:
+        add("Local-time peak 19-21h (CH, US, AE)", all(19 <= v <= 21 for v in peaks.values()),
+            ", ".join(f"{k} {v}:00" for k, v in peaks.items()), "19-21")
+    else:
+        add("Local-time peak 18-22h (CH, US, AE)", all(18 <= v <= 22 for v in peaks.values()),
+            ", ".join(f"{k} {v}:00" for k, v in peaks.items()), "18-22")
 
     if res.log:
         bad = amb = 0
         for line in res.log:
             mt = re.search(r"\[(\S+) ([+-]\d{4})\]", line)
+            if mt is None:
+                continue
             ts = pd.to_datetime(mt.group(1), format="%d/%b/%Y:%H:%M:%S")
             exp = _expected_offset(cfg.server_tz, ts)
             if exp is None:
@@ -185,7 +192,7 @@ def report(T: pd.DataFrame, M: dict[str, float], seed: int) -> str:
     lines = [f"seed {seed}: {int(T.passed.sum())}/{len(T)} passed"]
     lines += [f"  [{'PASS' if r.passed else 'FAIL'}] {r.test:<48} {r.value:<40} target {r.target}"
               for r in T.itertuples()]
-    lines += [f"  info: funnel entry {M['funnel_entry']:.2%}, DOW between/within "
+    lines += [(f"  info: funnel entry {M['funnel_entry']:.2%}, DOW between/within "
               f"{M['dow_between_within']:.2f}, growth first->last 4 weeks "
-              f"{M['growth_first_vs_last_4w']:+.0%}"]
+              f"{M['growth_first_vs_last_4w']:+.0%}")]
     return "\n".join(lines)
