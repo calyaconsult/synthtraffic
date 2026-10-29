@@ -1,2 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "synthtraffic"
+version = "2.0.0"
+description = "Synthetic web-traffic generator for a travel / tour-operator website"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.24,<3", "pandas>=2.0,<3"]
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6"]
+parquet = ["pyarrow>=14"]
+dev = ["pytest>=7", "ruff>=0.5", "mypy>=1.8", "pyyaml>=6", "pyarrow>=14"]
+
 [project.scripts]
 synthtraffic = "synthtraffic.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/synthtraffic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: full 91-day statistical validation across seeds"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

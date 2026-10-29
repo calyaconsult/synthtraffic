@@ -8,8 +8,8 @@ import argparse
 import logging
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import replace
-from typing import Sequence
 
 from . import __version__
 from .config import Config, load
@@ -89,9 +89,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     _setup_logging(a.verbose)
     if a.seeds < 1:
         parser.error("--seeds must be >= 1")
-    overrides = dict(seed=a.seed, start_date=a.start_date, n_days=a.n_days,
-                     access_log_lines=a.access_log_lines, out_dir=a.out_dir,
-                     write_events=False if a.no_events else None)
+    overrides = {"seed": a.seed, "start_date": a.start_date, "n_days": a.n_days,
+                     "access_log_lines": a.access_log_lines, "out_dir": a.out_dir,
+                     "write_events": False if a.no_events else None}
     try:
         cfg = load(a.config, **overrides)
     except (ValueError, ImportError, OSError) as exc:

@@ -13,21 +13,47 @@ from __future__ import annotations
 import bisect
 import math
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
-from itertools import accumulate
+from functools import cache
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 __all__ = [
-    "Cat", "pick", "sigmoid", "SITE_TREE", "TOUR2COUNTRY", "HOME", "FUNNEL", "FUNNEL_EVENT",
-    "Site", "build_site", "CHANNELS", "DEVICES", "COUNTRIES", "BROWSER_BY_DEVICE",
-    "CAMPAIGNS", "REFERRERS", "CH_CAT", "DEV_CAT", "CTY_CAT", "INTENT_CAT", "BUY", "DEEP",
-    "DOW_W", "HOUR_W", "MONTH_W", "season", "EVENT_CAL", "utc_offset_h", "hour_cat",
-    "next_page", "landing",
+    "BROWSER_BY_DEVICE",
+    "BUY",
+    "CAMPAIGNS",
+    "CHANNELS",
+    "CH_CAT",
+    "COUNTRIES",
+    "CTY_CAT",
+    "DEEP",
+    "DEVICES",
+    "DEV_CAT",
+    "DOW_W",
+    "EVENT_CAL",
+    "FUNNEL",
+    "FUNNEL_EVENT",
+    "HOME",
+    "HOUR_W",
+    "INTENT_CAT",
+    "MONTH_W",
+    "REFERRERS",
+    "SITE_TREE",
+    "TOUR2COUNTRY",
+    "Cat",
+    "Site",
+    "build_site",
+    "hour_cat",
+    "landing",
+    "next_page",
+    "pick",
+    "season",
+    "sigmoid",
+    "utc_offset_h",
 ]
 
 
@@ -35,11 +61,16 @@ __all__ = [
 class Cat:
     """Fast categorical sampler (cumulative weights + bisect). One draw per call."""
 
-    __slots__ = ("items", "cum")
+    __slots__ = ("cum", "items")
 
     def __init__(self, items: Sequence[Any], weights: Sequence[float]) -> None:
         self.items = list(items)
-        self.cum = list(accumulate(float(w) for w in weights))
+        acc: list[float] = []
+        c = 0.0
+        for w in weights:
+            c += float(w)
+            acc.append(c)
+        self.cum = acc
         if len(self.items) != len(self.cum) or not self.items:
             raise ValueError("Cat needs one weight per item and at least one item")
 
@@ -50,7 +81,11 @@ class Cat:
 
 def pick(rng: np.random.Generator, items: Sequence[Any], weights: Sequence[float]) -> Any:
     """One-off weighted choice; consumes exactly one random number."""
-    cum = list(accumulate(weights))
+    cum: list[float] = []
+    c = 0.0
+    for w in weights:
+        c += float(w)
+        cum.append(c)
     return items[min(bisect.bisect_right(cum, rng.random() * cum[-1]), len(items) - 1)]
 
 
@@ -123,8 +158,8 @@ _HUB_REGION_2 = {"TOURS": (0.44, 0.27), "COUNTRY INFO": (0.42, 0.28)}
 def _region_weights(section: str, n: int) -> tuple[float, ...]:
     if n == 2:                                   # calibrated default
         return _HUB_REGION_2[section]
-    total = sum(_HUB_REGION_2[section])          # same total share, split evenly
-    return tuple([total / n] * n)
+    total_val: float = float(sum(_HUB_REGION_2[section]))   # same total share, split evenly
+    return tuple(total_val / n for _ in range(n))
 
 
 @dataclass(frozen=True)
@@ -166,8 +201,8 @@ def build_site(tree: Mapping[str, Any] = SITE_TREE,
     def reg(url, title, section, region=None, price=None, ptype="content", w=1.0):
         if url in pages:
             raise ValueError(f"duplicate URL in site tree: {url}")
-        pages[url] = dict(url=url, page_title=title, section=section, region=region,
-                          price=price, page_type=ptype, weight=float(w))
+        pages[url] = {"url": url, "page_title": title, "section": section, "region": region,
+                          "price": price, "page_type": ptype, "weight": float(w)}
 
     section_hub = {s: "/" + _slug(s) for s in _SECTIONS}
     region_hub = {(s, r): f"{section_hub[s]}/{_slug(r)}" for s in _SECTIONS for r in tree[s]}
@@ -234,34 +269,34 @@ def build_site(tree: Mapping[str, Any] = SITE_TREE,
 
 
 # ---------------------------------------------------------- audience dimensions
-CHANNELS = MappingProxyType({
-    "organic_search": dict(p=.34, bounce=0.0, depth=1.00),
-    "direct":         dict(p=.18, bounce=-.25, depth=1.10),
-    "paid_search":    dict(p=.17, bounce=.20, depth=0.95),
-    "social":         dict(p=.15, bounce=.75, depth=0.70),
-    "email":          dict(p=.09, bounce=-.60, depth=1.30),
-    "referral":       dict(p=.07, bounce=.05, depth=1.00)})
-DEVICES = MappingProxyType({
-    "mobile":  dict(p=.58, bounce=.35, depth=.80),
-    "desktop": dict(p=.33, bounce=-.20, depth=1.25),
-    "tablet":  dict(p=.09, bounce=.05, depth=1.00)})
+CHANNELS: Mapping[str, dict[str, float]] = MappingProxyType({
+    "organic_search": {"p": .34, "bounce": 0.0, "depth": 1.00},
+    "direct":         {"p": .18, "bounce": -.25, "depth": 1.10},
+    "paid_search":    {"p": .17, "bounce": .20, "depth": 0.95},
+    "social":         {"p": .15, "bounce": .75, "depth": 0.70},
+    "email":          {"p": .09, "bounce": -.60, "depth": 1.30},
+    "referral":       {"p": .07, "bounce": .05, "depth": 1.00}})
+DEVICES: Mapping[str, dict[str, float]] = MappingProxyType({
+    "mobile":  {"p": .58, "bounce": .35, "depth": .80},
+    "desktop": {"p": .33, "bounce": -.20, "depth": 1.25},
+    "tablet":  {"p": .09, "bounce": .05, "depth": 1.00}})
 # real IANA zones -> correct local hours incl. DST (US 1 Nov, EU 25 Oct, Gulf never)
-COUNTRIES = MappingProxyType({
-    "CH": dict(p=.33, tz="Europe/Zurich", lang="de-CH"),
-    "DE": dict(p=.22, tz="Europe/Berlin", lang="de-DE"),
-    "AT": dict(p=.09, tz="Europe/Vienna", lang="de-AT"),
-    "FR": dict(p=.08, tz="Europe/Paris", lang="fr-FR"),
-    "GB": dict(p=.09, tz="Europe/London", lang="en-GB"),
-    "US": dict(p=.11, tz="America/New_York", lang="en-US"),
-    "AE": dict(p=.04, tz="Asia/Dubai", lang="en-AE"),
-    "OM": dict(p=.04, tz="Asia/Muscat", lang="en-OM")})
+COUNTRIES: Mapping[str, dict[str, Any]] = MappingProxyType({
+    "CH": {"p": .33, "tz": "Europe/Zurich", "lang": "de-CH"},
+    "DE": {"p": .22, "tz": "Europe/Berlin", "lang": "de-DE"},
+    "AT": {"p": .09, "tz": "Europe/Vienna", "lang": "de-AT"},
+    "FR": {"p": .08, "tz": "Europe/Paris", "lang": "fr-FR"},
+    "GB": {"p": .09, "tz": "Europe/London", "lang": "en-GB"},
+    "US": {"p": .11, "tz": "America/New_York", "lang": "en-US"},
+    "AE": {"p": .04, "tz": "Asia/Dubai", "lang": "en-AE"},
+    "OM": {"p": .04, "tz": "Asia/Muscat", "lang": "en-OM"}})
 BROWSER_BY_DEVICE = MappingProxyType({
     "mobile":  Cat(["Chrome", "Safari", "Samsung Internet", "Firefox"], [.42, .34, .18, .06]),
     "desktop": Cat(["Chrome", "Edge", "Safari", "Firefox"], [.58, .18, .12, .12]),
     "tablet":  Cat(["Safari", "Chrome", "Firefox"], [.62, .30, .08])})
 CAMPAIGNS = Cat(["oman_autumn", "dubai_citybreak", "egypt_nile", "morocco_imperial",
                  "prague_weekend", "vienna_art", "brand_generic", "newsletter_oct"], [1] * 8)
-REFERRERS = MappingProxyType({
+REFERRERS: Mapping[str, Sequence[str | None]] = MappingProxyType({
     "organic_search": ["https://www.google.com/", "https://www.bing.com/", "https://duckduckgo.com/"],
     "social": ["https://www.instagram.com/", "https://l.facebook.com/", "https://t.co/",
                "https://www.pinterest.ch/"],
@@ -271,7 +306,7 @@ REFERRERS = MappingProxyType({
     "direct": [None]})
 CH_CAT = Cat(list(CHANNELS), [v["p"] for v in CHANNELS.values()])
 DEV_CAT = Cat(list(DEVICES), [v["p"] for v in DEVICES.values()])
-CTY_CAT = Cat(list(COUNTRIES), [v["p"] for v in COUNTRIES.values()])
+CTY_CAT = Cat(list(COUNTRIES), [float(v["p"]) for v in COUNTRIES.values()])
 INTENT_CAT = Cat(["browser", "researcher", "buyer", "admin_seeker"], [.46, .34, .14, .06])
 BUY = MappingProxyType({"buyer": 1.0, "researcher": .35, "browser": .10, "admin_seeker": .05})
 DEEP = MappingProxyType({"buyer": .80, "researcher": .86, "browser": .58, "admin_seeker": .35})
@@ -279,8 +314,8 @@ DEEP = MappingProxyType({"buyer": .80, "researcher": .86, "browser": .58, "admin
 
 # ------------------------------------------------------ seasonality (leisure)
 DOW_W = MappingProxyType({0: 1.00, 1: 1.02, 2: 1.00, 3: 0.98, 4: 0.86, 5: 1.08, 6: 1.32})
-HOUR_W = (.30, .18, .11, .08, .07, .09, .18, .38, .60, .74, .82, .86,
-          .84, .80, .78, .80, .86, .94, 1.00, 1.12, 1.20, 1.10, .78, .50)   # LOCAL time
+HOUR_W = (0.30, 0.18, 0.11, 0.08, 0.07, 0.09, 0.18, 0.38, 0.60, 0.74, 0.82, 0.86,
+          0.84, 0.80, 0.78, 0.80, 0.86, 0.94, 1.00, 1.12, 1.20, 1.10, 0.78, 0.50)   # LOCAL time
 MONTH_W = (1.18, 1.12, 1.05, .98, .92, .86, .80, .84, 1.02, 1.14, 1.10, .95)
 _MID_DOY = (15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349)
 _SX = np.array(_MID_DOY + (_MID_DOY[0] + 365,))
@@ -297,17 +332,18 @@ def season(d: pd.Timestamp) -> float:
     return float(np.interp(doy, _SX, _SY))
 
 
-@lru_cache(maxsize=None)
+@cache
 def utc_offset_h(tzname: str, ts: pd.Timestamp) -> float:
     """UTC offset in hours for a naive local timestamp in ``tzname``."""
     return pd.Timestamp(ts).tz_localize(tzname, ambiguous=False,
                                         nonexistent="shift_forward").utcoffset().total_seconds() / 3600
 
 
-@lru_cache(maxsize=None)
-def hour_cat(shift: int) -> Cat:
+@cache
+def hour_cat(shift: int) -> Cat:  # type: ignore[misc]
     """Server-hour sampler for visitors whose local time is server time + ``shift``."""
-    return Cat(range(24), [HOUR_W[(h + shift) % 24] for h in range(24)])
+    weights: list[float] = [float(HOUR_W[(h + shift) % 24]) for h in range(24)]
+    return Cat(list(range(24)), weights)
 
 
 # --------------------------------------------------------------- journey model

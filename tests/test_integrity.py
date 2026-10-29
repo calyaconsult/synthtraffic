@@ -1,13 +1,15 @@
 # tests/test_integrity.py
 import pytest
+
 from synthtraffic import config, generate, validate
+
 
 @pytest.fixture(scope="session")
 def result():
     return generate.run(config.Config(seed=42, n_days=35, burn_in_days=28))
 
 def test_all_integrity_checks(result):
-    T, _ = validate.run_tests(result)
+    T, _ = validate.run_tests(result, kpi_checks=False)
     failed = T[~T.passed]
     assert failed.empty, "\n" + failed.to_string(index=False)
 

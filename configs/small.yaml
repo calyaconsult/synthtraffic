@@ -1,0 +1,3 @@
+n_days: 14
+access_log_lines: 200
+funnel_step: [0.72, 0.80]
