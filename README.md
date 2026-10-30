@@ -30,7 +30,7 @@ HOME
 Requires Python ≥ 3.10.
 
 ```bash
-git clone https://github.com/<user>/synthtraffic.git
+git clone https://github.com/calyaconsult/synthtraffic.git
 cd synthtraffic
 pip install -e .              # core: numpy, pandas
 pip install -e ".[yaml]"      # + YAML config files
