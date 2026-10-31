@@ -6,7 +6,7 @@
 
 **Try it without downloading or installing:** [Corresponding Python Script on Google Colab](https://colab.research.google.com/drive/1VF2ZRF2PAyJDdSP1xgPqO5r8J6MnVI6C?usp=sharing)
 
-**Related project:" [Pizzeria Simulator](https://github.com/calyaconsult/pizzeria-simulator)
+**Related project:** [Pizzeria Simulator](https://github.com/calyaconsult/pizzeria-simulator)
 
 ## What it produces
 
