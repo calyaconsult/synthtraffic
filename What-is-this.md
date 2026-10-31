@@ -2,6 +2,10 @@
 
 **synthtraffic** is a Python tool that generates fake (but realistic) website traffic data. It imitates the visitors of an imaginary travel agency's website that sells tours to places like Oman, Dubai, Egypt, Prague and Vienna. Because the data is invented by rules and not collected from real people, it contains no personal information.
 
+**TL;DR:** it is a safe, repeatable "practice dataset factory" for anyone who wants to work with website analytics data without needing real, privacy-sensitive visitor data.
+
+**Try it without downloading or installing:** [Corresponding Python Script on Google Colab](https://colab.research.google.com/drive/1VF2ZRF2PAyJDdSP1xgPqO5r8J6MnVI6C?usp=sharing)
+
 ## What it produces
 
 Each run creates a set of files that look like what a real web analytics system would record:
@@ -36,4 +40,3 @@ The README suggests using it to:
 - The README is open about its limits: the numbers are plausible assumptions, not based on real data, so they are illustrative rather than accurate.
 - It is released under the MIT license, so it can be freely used and shared.
 
-**In one sentence:** it is a safe, repeatable "practice dataset factory" for anyone who wants to work with website analytics data without needing real, privacy-sensitive visitor data.
